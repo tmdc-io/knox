@@ -1,6 +1,6 @@
 module github.com/pinterest/knox
 
-go 1.24.0
+go 1.26
 
 require (
 	github.com/golang/protobuf v1.5.4
@@ -13,7 +13,6 @@ require (
 
 require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect

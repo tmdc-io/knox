@@ -36,7 +36,7 @@ func (c *aesGCMCryptor) EncryptVersion(k *knox.Key, v *knox.KeyVersion) (*EncKey
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(b)
+	gcm, err := cipher.NewGCMWithRandomNonce(b)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (c *aesGCMCryptor) decryptVersion(k *DBKey, v *EncKeyVersion) (*knox.KeyVer
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(b)
+	gcm, err := cipher.NewGCMWithRandomNonce(b)
 	if err != nil {
 		return nil, err
 	}
