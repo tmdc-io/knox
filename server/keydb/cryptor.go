@@ -45,7 +45,7 @@ func (c *aesGCMCryptor) EncryptVersion(k *knox.Key, v *knox.KeyVersion) (*EncKey
 		return nil, err
 	}
 
-	ciphertext := gcm.Seal(nil, nonce, v.Data, c.generateAD(k.ID, v.ID, v.CreationTime))
+	ciphertext := gcm.Seal(nil, nil, v.Data, c.generateAD(k.ID, v.ID, v.CreationTime))
 
 	return &EncKeyVersion{
 		ID:             v.ID,
@@ -83,7 +83,7 @@ func (c *aesGCMCryptor) decryptVersion(k *DBKey, v *EncKeyVersion) (*knox.KeyVer
 		return nil, err
 	}
 
-	plaintext, err := gcm.Open(nil, md.Nonce(), v.EncData, c.generateAD(k.ID, v.ID, v.CreationTime))
+	plaintext, err := gcm.Open(nil, nil, v.EncData, c.generateAD(k.ID, v.ID, v.CreationTime))
 	if err != nil {
 		return nil, err
 	}
