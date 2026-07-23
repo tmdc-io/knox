@@ -35,7 +35,29 @@ func TestEncryptDecryptVersion(t *testing.T) {
 		VersionHash: k.VersionHash,
 	}
 	v := k.VersionList.GetPrimary()
-	crypt := &aesGCMCryptor{testSecret, 10}
+	crypt := &aesGCMCryptor{testSecret, 10, false}
+	encV, err := crypt.EncryptVersion(k, v)
+	if err != nil {
+		t.Fatalf("%s is not nil", err)
+	}
+	decV, err := crypt.decryptVersion(dbKey, encV)
+	if err != nil {
+		t.Fatalf("%s is not nil", err)
+	}
+	if !reflect.DeepEqual(decV, v) {
+		t.Fatal("decrypted key does not equal key")
+	}
+}
+
+func TestEncryptDecryptVersionFips(t *testing.T) {
+	k := makeTestKey()
+	dbKey := &DBKey{
+		ID:          k.ID,
+		ACL:         k.ACL,
+		VersionHash: k.VersionHash,
+	}
+	v := k.VersionList.GetPrimary()
+	crypt := &aesGCMCryptor{testSecret, 10, true}
 	encV, err := crypt.EncryptVersion(k, v)
 	if err != nil {
 		t.Fatalf("%s is not nil", err)
@@ -52,6 +74,25 @@ func TestEncryptDecryptVersion(t *testing.T) {
 func TestEncryptDecryptKey(t *testing.T) {
 	k := makeTestKey()
 	crypt := NewAESGCMCryptor(10, testSecret)
+	aesCryptor := crypt.(*aesGCMCryptor)
+	aesCryptor.fipsEnabled = true
+	encK, err := crypt.Encrypt(k)
+	if err != nil {
+		t.Fatalf("%s is not nil", err)
+	}
+	decK, err := crypt.Decrypt(encK)
+	if err != nil {
+		t.Fatalf("%s is not nil", err)
+	}
+	if !reflect.DeepEqual(decK, k) {
+		t.Fatal("decrypted key does not equal key")
+	}
+}
+
+func TestEncryptDecryptKeyFips(t *testing.T) {
+	k := makeTestKey()
+	crypt := NewAESGCMCryptor(10, testSecret)
+
 	encK, err := crypt.Encrypt(k)
 	if err != nil {
 		t.Fatalf("%s is not nil", err)

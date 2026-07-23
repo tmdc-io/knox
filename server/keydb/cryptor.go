@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/fips140"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-
 	"github.com/pinterest/knox"
 )
 
@@ -22,13 +22,19 @@ type Cryptor interface {
 
 // NewAESGCMCryptor creates a Cryptor that performs AES GCM AEAD encryption on key data.
 func NewAESGCMCryptor(version byte, keyData []byte) Cryptor {
-	return &aesGCMCryptor{keyData, version}
+	c := aesGCMCryptor{
+		keyData:     keyData,
+		version:     version,
+		fipsEnabled: fips140.Enabled(),
+	}
+	return &c
 }
 
 // aesGCMCryptor does AES encryption, but does not include correct associated data.
 type aesGCMCryptor struct {
-	keyData []byte
-	version byte
+	keyData     []byte
+	version     byte
+	fipsEnabled bool
 }
 
 func (c *aesGCMCryptor) EncryptVersion(k *knox.Key, v *knox.KeyVersion) (*EncKeyVersion, error) {
@@ -36,7 +42,25 @@ func (c *aesGCMCryptor) EncryptVersion(k *knox.Key, v *knox.KeyVersion) (*EncKey
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCMWithRandomNonce(b)
+	if c.fipsEnabled {
+		gcm, err := cipher.NewGCMWithRandomNonce(b)
+		if err != nil {
+			return nil, err
+		}
+		nonce := make([]byte, gcm.NonceSize())
+		if _, err := rand.Read(nonce); err != nil {
+			return nil, err
+		}
+		ciphertext := gcm.Seal(nil, nil, v.Data, c.generateAD(k.ID, v.ID, v.CreationTime))
+		return &EncKeyVersion{
+			ID:             v.ID,
+			EncData:        ciphertext,
+			Status:         v.Status,
+			CreationTime:   v.CreationTime,
+			CryptoMetadata: buildMetadata(c.version, nonce),
+		}, nil
+	}
+	gcm, err := cipher.NewGCM(b)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +68,7 @@ func (c *aesGCMCryptor) EncryptVersion(k *knox.Key, v *knox.KeyVersion) (*EncKey
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-
-	ciphertext := gcm.Seal(nil, nil, v.Data, c.generateAD(k.ID, v.ID, v.CreationTime))
-
+	ciphertext := gcm.Seal(nil, nonce, v.Data, c.generateAD(k.ID, v.ID, v.CreationTime))
 	return &EncKeyVersion{
 		ID:             v.ID,
 		EncData:        ciphertext,
@@ -54,6 +76,7 @@ func (c *aesGCMCryptor) EncryptVersion(k *knox.Key, v *knox.KeyVersion) (*EncKey
 		CreationTime:   v.CreationTime,
 		CryptoMetadata: buildMetadata(c.version, nonce),
 	}, nil
+
 }
 
 // generateAD generates the data to be signed with key version versionid|creationtime|keyid
@@ -78,12 +101,30 @@ func (c *aesGCMCryptor) decryptVersion(k *DBKey, v *EncKeyVersion) (*knox.KeyVer
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCMWithRandomNonce(b)
+	if c.fipsEnabled {
+		gcm, err := cipher.NewGCMWithRandomNonce(b)
+		if err != nil {
+			return nil, err
+		}
+
+		plaintext, err := gcm.Open(nil, nil, v.EncData, c.generateAD(k.ID, v.ID, v.CreationTime))
+		if err != nil {
+			return nil, err
+		}
+
+		return &knox.KeyVersion{
+			ID:           v.ID,
+			Data:         plaintext,
+			Status:       v.Status,
+			CreationTime: v.CreationTime,
+		}, nil
+	}
+	gcm, err := cipher.NewGCM(b)
 	if err != nil {
 		return nil, err
 	}
 
-	plaintext, err := gcm.Open(nil, nil, v.EncData, c.generateAD(k.ID, v.ID, v.CreationTime))
+	plaintext, err := gcm.Open(nil, md.Nonce(), v.EncData, c.generateAD(k.ID, v.ID, v.CreationTime))
 	if err != nil {
 		return nil, err
 	}
